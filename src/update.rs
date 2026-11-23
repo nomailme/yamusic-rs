@@ -12,11 +12,6 @@ use std::time::Duration;
 /// Как часто спрашивать GitHub. У оригинала UPDATE_POLL_INTERVAL_MS — те же 30 минут.
 pub const POLL: Duration = Duration::from_secs(30 * 60);
 
-/// Имя exe в релизе.
-const ASSET: &str = concat!(env!("CARGO_PKG_NAME"), ".exe");
-/// APK в релизе. На Android «Обновить» ведёт прямо на него: браузер скачает и предложит установить.
-const APK: &str = "yamusic-rs-arm64-v8a.apk";
-
 /// Проверка включена в настройках («Проверять обновления»).
 pub static ENABLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 
@@ -33,7 +28,7 @@ pub struct Release {
     pub version: String,
     /// Страница релиза на GitHub.
     pub page: String,
-    /// Exe: адрес, размер и SHA-256. Нет — обнови��ь можно только руками.
+    /// Exe: адрес, размер и SHA-256. Нет — обновить можно только вручную.
     pub exe: Option<(String, u64, String)>,
 }
 
@@ -45,12 +40,6 @@ fn client() -> Result<reqwest::blocking::Client, String> {
         .connect_timeout(Duration::from_secs(10))
         .build()
         .map_err(|e| e.to_string())
-}
-
-/// «v1.2.3» / «1.2.3» → (1, 2, 3). Пре-релизы (`/releases/latest` их и так не отдаёт) не нужны.
-fn parse_version(s: &str) -> Option<(u32, u32, u32)> {
-    let mut it = s.trim().trim_start_matches('v').split(['.', '-']).map(|p| p.parse::<u32>());
-    Some((it.next()?.ok()?, it.next()?.ok()?, it.next().unwrap_or(Ok(0)).ok()?))
 }
 
 /// Авто-проверка отключена: сообщаем, что обновление не требуется, без сетевого запроса.
@@ -128,14 +117,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn versions() {
-        assert_eq!(parse_version("v0.2.0"), Some((0, 2, 0)));
-        assert_eq!(parse_version("1.10"), Some((1, 10, 0)));
-        assert!(parse_version("v0.10.0") > parse_version("0.9.9"));
-        assert_eq!(parse_version("latest"), None);
-    }
-
-    #[test]
     fn update_check_is_disabled_without_network() {
         assert!(check().unwrap().is_none());
     }
@@ -143,6 +124,5 @@ mod tests {
     #[test]
     fn paths() {
         assert_eq!(old_path(Path::new(r"C:\a\yamusic-rs.exe")), Path::new(r"C:\a\yamusic-rs.old.exe"));
-        assert_eq!(ASSET, "yamusic-rs.exe");
     }
 }
