@@ -33,7 +33,7 @@ pub struct Release {
     pub version: String,
     /// Страница релиза на GitHub.
     pub page: String,
-    /// Exe: адрес, размер и SHA-256. Нет — обновить можно только руками.
+    /// Exe: адрес, размер и SHA-256. Нет — обнови��ь можно только руками.
     pub exe: Option<(String, u64, String)>,
 }
 
@@ -53,49 +53,9 @@ fn parse_version(s: &str) -> Option<(u32, u32, u32)> {
     Some((it.next()?.ok()?, it.next()?.ok()?, it.next().unwrap_or(Ok(0)).ok()?))
 }
 
-/// Последний релиз, если он новее запущенной версии.
+/// Авто-проверка отключена: сообщаем, что обновление не требуется, без сетевого запроса.
 pub fn check() -> Result<Option<Release>, String> {
-    let api = env!("CARGO_PKG_REPOSITORY").replace("https://github.com/", "https://api.github.com/repos/");
-    let resp = client()?.get(format!("{api}/releases/latest")).send().map_err(|e| crate::config::chain(&e))?;
-    // 404 — релизов ещё нет.
-    if resp.status() == reqwest::StatusCode::NOT_FOUND {
-        return Ok(None);
-    }
-    if !resp.status().is_success() {
-        return Err(format!("GitHub: HTTP {}", resp.status()));
-    }
-    let v: serde_json::Value = resp.json().map_err(|e| e.to_string())?;
-    let tag = v.get("tag_name").and_then(|t| t.as_str()).ok_or("в релизе нет версии")?;
-    let (Some(latest), Some(current)) = (parse_version(tag), parse_version(env!("CARGO_PKG_VERSION"))) else {
-        return Err(format!("непонятная версия {tag}"));
-    };
-    if latest <= current {
-        return Ok(None);
-    }
-    // На Linux exe не нужен: новый пакет ставится со страницы релиза.
-    let assets = v.get("assets").and_then(|a| a.as_array()).filter(|_| cfg!(windows));
-    let exe = assets.and_then(|assets| {
-        let a = assets.iter().find(|a| a.get("name").and_then(|n| n.as_str()) == Some(ASSET))?;
-        let url = a.get("browser_download_url")?.as_str()?.to_string();
-        let size = a.get("size")?.as_u64()?;
-        let sha = a.get("digest")?.as_str()?.strip_prefix("sha256:")?.to_ascii_lowercase();
-        Some((url, size, sha))
-    });
-    let apk = v
-        .get("assets")
-        .and_then(|a| a.as_array())
-        .filter(|_| cfg!(target_os = "android"))
-        .and_then(|assets| assets.iter().find(|a| a.get("name").and_then(|n| n.as_str()) == Some(APK)))
-        .and_then(|a| a.get("browser_download_url")?.as_str());
-    Ok(Some(Release {
-        version: tag.trim_start_matches('v').to_string(),
-        // Страницу откроет браузер системы: адрес из ответа берём, только если это https.
-        page: apk
-            .or_else(|| v.get("html_url").and_then(|u| u.as_str()))
-            .and_then(crate::client::browser_url)
-            .unwrap_or_else(|| env!("CARGO_PKG_REPOSITORY").to_string()),
-        exe,
-    }))
+    Ok(None)
 }
 
 fn old_path(exe: &Path) -> PathBuf {
@@ -173,6 +133,11 @@ mod tests {
         assert_eq!(parse_version("1.10"), Some((1, 10, 0)));
         assert!(parse_version("v0.10.0") > parse_version("0.9.9"));
         assert_eq!(parse_version("latest"), None);
+    }
+
+    #[test]
+    fn update_check_is_disabled_without_network() {
+        assert!(check().unwrap().is_none());
     }
 
     #[test]
